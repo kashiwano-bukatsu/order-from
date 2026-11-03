@@ -202,6 +202,7 @@ function itemCard(it) {
   card.append(el('img', { src: IMG[it.id], alt: it.name, loading: 'lazy' }));
   const body = el('div', { class: 'body' });
   body.append(el('h2', { text: it.name }), el('div', { class: 'price', text: priceText(it) }));
+  if (it.priceNote) body.append(el('div', { class: 'hint', style: 'margin:-6px 0 8px', text: it.priceNote }));
 
   const fields = {};
   if (it.colors) {
@@ -274,19 +275,31 @@ function lineLabel(l) {
   return [l.itemName, l.color, l.logo, l.printName && ('名前 ' + l.printName), l.numbers && ('背番号候補 ' + l.numbers.join(' / ')), 'サイズ ' + l.size, '×' + l.qty].filter(Boolean).join('　');
 }
 
+function calcDisc(D, pieces, sub) {
+  if (!D || !D.enabled || pieces < 1) return 0;
+  let d = 0;
+  if (D.type === 'tiered') {
+    const t = D.tiers;
+    d = pieces <= t.length ? t[pieces - 1] : t[t.length - 1] + (pieces - t.length) * D.extra;
+  } else if (D.type === 'yen') {
+    d = Number(D.value) || 0;
+  } else {
+    d = Math.floor(sub * (Number(D.value) || 0) / 100);
+  }
+  return Math.max(0, Math.min(d, sub));
+}
+
 function total() {
-  let sub = 0, unknown = false;
+  let sub = 0, unknown = false, pieces = 0, provisional = false;
   cart.forEach((l) => {
     const it = CONFIG.items.find((i) => i.id === l.itemId);
+    pieces += l.qty;
+    if (it.priceNote) provisional = true;
     if (it.price == null) unknown = true; else sub += it.price * l.qty;
   });
   const D = CONFIG.discount || {};
-  let disc = 0;
-  if (!unknown && D.enabled) {
-    const val = Number(D.value) || 0;
-    disc = D.type === 'yen' ? Math.min(val, sub) : Math.floor(sub * val / 100);
-  }
-  return { sub, disc, t: sub - disc, unknown, label: D.label || '会員特別割引' };
+  const disc = unknown ? 0 : calcDisc(D, pieces, sub);
+  return { sub, disc, t: sub - disc, unknown, pieces, provisional, label: D.label || '会員特別割引' };
 }
 
 function renderSheet() {
@@ -352,6 +365,7 @@ function renderConfirm() {
     sumRows.append(el('div', {}, el('span', { text: '小計' }), el('span', { text: yen(tt.sub) })));
     if (tt.disc > 0) sumRows.append(el('div', { class: 'disc' }, el('span', { text: tt.label }), el('span', { text: '-' + yen(tt.disc) })));
     sumRows.append(el('div', { class: 'grand' }, el('span', { text: '合計' }), el('span', { text: yen(tt.t) })));
+    if (tt.provisional) sumRows.append(el('div', { style: 'display:block;font-size:12px;color:var(--mute)', text: '※ 価格が仮の商品を含みます。確定金額は決まり次第お知らせします。' }));
   }
 
   const kids = [
@@ -453,6 +467,15 @@ function renderCheck() {
   const btn = el('button', { class: 'btn', text: '注文書を見る' });
 
   const kv = (k, val) => el('div', {}, el('span', { text: k }), el('span', { text: val }));
+  const sumBlock = (r, hasActive) => {
+    const b = el('div', { class: 'sumrows' });
+    if (hasActive && r.total != null && r.disc > 0) {
+      b.append(kv('小計', yen(r.sub)), el('div', { class: 'disc' }, el('span', { text: r.discLabel }), el('span', { text: '-' + yen(r.disc) })));
+    }
+    b.append(el('div', { class: 'grand' }, el('span', { text: '合計' }), el('span', { text: hasActive ? (r.total == null ? '金額は決まり次第お知らせします' : yen(r.total)) : '—' })));
+    if (hasActive && r.provisional) b.append(el('div', { style: 'display:block;font-size:12px;color:var(--mute)', text: '※ 価格が仮の商品を含みます。確定金額は決まり次第お知らせします。' }));
+    return b;
+  };
 
   btn.onclick = async () => {
     err.textContent = ''; out.replaceChildren();
@@ -480,7 +503,7 @@ function renderCheck() {
         rows,
         el('label', { text: 'ご注文内容' }),
         ...items,
-        el('div', { class: 'sumrows' }, el('div', { class: 'grand' }, el('span', { text: '合計' }), el('span', { text: active.length ? (r.total == null ? '金額は決まり次第お知らせします' : yen(r.total)) : '—' }))),
+        sumBlock(r, active.length > 0),
         el('div', { class: 'hint', style: 'margin-top:8px', text: '商品代金は、商品のお引き渡し時にお支払いいただきます。' }),
         active.length && !closedNow ? el('button', { class: 'btn danger', text: 'この注文をキャンセルする', onclick: async (ev) => {
           if (!confirm('この注文をすべてキャンセルします。よろしいですか？')) return;

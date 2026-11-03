@@ -82,7 +82,7 @@
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbz_5TfUEjFaLjdi1MXQXOt2TibdbfwBh9NhGJ8EbOJSYzxivu3ObuTi9cK3lT8ik8CU/exec';
 
 const $ = (id) => document.getElementById(id);
-let PASS = '', ROWS = [], tab = 'orders', q = '', filter = 'all';
+let DISC = {}, PASS = '', ROWS = [], tab = 'orders', q = '', filter = 'all';
 
 function el(tag, attrs, ...kids) {
   const e = document.createElement(tag);
@@ -113,6 +113,7 @@ async function load() {
   const r = await api({ action: 'adminList', pass: PASS });
   if (!r.ok) throw new Error(r.error);
   ROWS = r.rows;
+  DISC = r.discount || {};
 }
 async function enter() {
   await load();
@@ -141,6 +142,19 @@ PASS = savedPass;
 enter().catch(() => {}); // 合言葉が未設定ならそのまま開く。必要なときだけログイン画面が残る
 
 /* ---------- データ整形 ---------- */
+function calcDisc(D, pieces, sub) {
+  if (!D || !D.enabled || pieces < 1) return 0;
+  let d = 0;
+  if (D.type === 'tiered') {
+    const t = D.tiers;
+    d = pieces <= t.length ? t[pieces - 1] : t[t.length - 1] + (pieces - t.length) * D.extra;
+  } else if (D.type === 'yen') {
+    d = Number(D.value) || 0;
+  } else {
+    d = Math.floor(sub * (Number(D.value) || 0) / 100);
+  }
+  return Math.max(0, Math.min(d, sub));
+}
 function groupOrders() {
   const m = new Map();
   ROWS.forEach((r) => {
@@ -153,7 +167,10 @@ function groupOrders() {
     o.canceled = act.length === 0;
     o.paid = act.length > 0 && act.every((l) => l.paid);
     o.handed = act.length > 0 && act.every((l) => l.handed);
-    o.total = act.some((l) => l.subtotal == null) ? null : act.reduce((a, l) => a + l.subtotal, 0);
+    const sub = act.some((l) => l.subtotal == null) ? null : act.reduce((a, l) => a + l.subtotal, 0);
+    o.sub = sub;
+    o.disc = sub == null ? 0 : calcDisc(DISC, act.reduce((a, l) => a + l.qty, 0), sub);
+    o.total = sub == null ? null : sub - o.disc;
     return o;
   }).reverse();
 }
@@ -227,7 +244,7 @@ function ordersView() {
   });
   const cards = shown.map((o) => el('div', { class: 'card' + (o.canceled ? ' cancel' : '') },
     el('div', { class: 'head' }, el('b', { text: o.name }), el('span', { class: 'id', text: '#' + o.id })),
-    el('div', { class: 'sub', text: o.placedAt + (o.events ? '　参加種目：' + o.events : '') + (o.total != null && !o.canceled ? '　' + yen(o.total) : '') }),
+    el('div', { class: 'sub', text: o.placedAt + (o.events ? '　参加種目：' + o.events : '') + (o.total != null && !o.canceled ? '　' + yen(o.total) + (o.disc ? '（会員割引 -' + yen(o.disc) + '）' : '') : '') }),
     ...o.lines.map((l) => el('div', { class: 'line', style: l.state === 'キャンセル' ? 'text-decoration:line-through;color:var(--mute)' : '', text: lineText(l) })),
     el('div', { class: 'acts' },
       o.canceled ? null : el('button', { class: 'tog' + (o.paid ? ' on' : ''), text: o.paid ? '✓ 入金済み' : '入金済みにする', onclick: () => setFlag(o, 'paid', !o.paid) }),
