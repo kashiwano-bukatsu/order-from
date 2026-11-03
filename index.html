@@ -44,6 +44,13 @@
   .bar .sum{flex:1;font-size:13px;color:var(--mute)}
   .bar .sum b{display:block;font-size:16px;color:var(--ink)}
   .bar button{padding:12px 22px;border:0;border-radius:12px;background:var(--pink);color:#fff;font-weight:700;font-size:15px}
+  .bar .sum{cursor:pointer}
+  .bar .sum span::after{content:" ▲";font-size:11px}
+  .bar.open .sum span::after{content:" ▼"}
+  .sheet{position:fixed;left:0;right:0;bottom:var(--barh,70px);background:#fff;border-top:1px solid var(--line);box-shadow:0 -8px 24px #0002;max-height:55vh;overflow:auto;padding:12px 16px;z-index:4}
+  .sheet h3{margin:0 0 4px;font-size:15px}
+  .sheet .inner{max-width:560px;margin:0 auto}
+  .sheet .empty{color:var(--mute);font-size:14px;padding:10px 0}
   .notice{background:#fff8e1;border:1px solid #f0dd9a;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:16px}
   .done{text-align:center;padding:30px 10px}
   .done .no{font-size:30px;font-weight:800;letter-spacing:.05em;color:var(--green);margin:6px 0}
@@ -69,6 +76,7 @@
   <div id="viewDone" class="hidden"></div>
 </main>
 
+<div class="sheet hidden" id="sheet"><div class="inner"><h3>🛒 カートの中身</h3><div id="sheetList"></div></div></div>
 <div class="bar hidden" id="bar">
   <div class="sum"><span id="barCount">0点</span><b id="barTotal"></b></div>
   <button id="barBtn">注文内容を確認</button>
@@ -82,6 +90,8 @@ const $ = (id) => document.getElementById(id);
 let CONFIG = null;
 let cart = [];
 let customerName = '';
+let confirming = false;
+let NUM_COUNTS = {};
 
 const yen = (n) => '¥' + Number(n).toLocaleString('ja-JP');
 const priceText = (it) => it.price == null ? '価格は後日お知らせ' : yen(it.price);
@@ -113,6 +123,10 @@ async function init() {
     const res = await fetch(GAS_URL);
     const data = await res.json();
     CONFIG = data.config;
+    NUM_COUNTS = data.numberCounts || {};
+    // 表示順：半袖 → ロングT → リバーシブル（ユニフォーム）
+    const ORDER = ['tee', 'long', 'uniform'];
+    CONFIG.items.sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
     $('loading').classList.add('hidden');
     if (data.closed) {
       showClosed();
@@ -135,7 +149,8 @@ function show(which) {
   $('view' + (which === 'order' ? 'Order' : which === 'check' ? 'Check' : 'Done')).classList.remove('hidden');
   $('tabOrder').classList.toggle('on', which === 'order');
   $('tabCheck').classList.toggle('on', which === 'check');
-  $('bar').classList.toggle('hidden', which !== 'order' || !cart.length);
+  setSheet(false);
+  $('bar').classList.toggle('hidden', which !== 'order' || !cart.length || confirming);
   window.scrollTo(0, 0);
 }
 $('tabOrder').onclick = () => show('order');
@@ -182,8 +197,13 @@ function itemCard(it) {
     body.append(el('label', {}, '背面の名前 ', el('span', { class: 'hint', text: 'ローマ字・12文字まで（例: CONPEY）' })));
     fields.printName = el('input', { type: 'text', maxlength: '12', autocapitalize: 'characters', placeholder: 'CONPEY' });
     body.append(fields.printName);
-    body.append(el('label', {}, '背番号の候補 ', el('span', { class: 'hint', text: '0〜99・1〜3つ（希望順）。重複は運営で調整します' })));
-    fields.nums = [1, 2, 3].map((i) => el('input', { type: 'text', inputmode: 'numeric', maxlength: '2', placeholder: '第' + i + '希望' }));
+    body.append(el('label', {}, '背番号の候補 ', el('span', { class: 'hint', text: '0〜99から最大3つ（希望順）。（ ）は現在の希望件数。重複は運営で調整します' })));
+    fields.nums = [1, 2, 3].map((i) => el('select', {},
+      el('option', { value: '', text: '第' + i + '希望' }),
+      Array.from({ length: 100 }, (_, n) => {
+        const c = NUM_COUNTS[String(n)] || 0;
+        return el('option', { value: String(n), text: c ? n + '（希望' + c + '件）' : String(n) });
+      })));
     body.append(el('div', { class: 'row' }, fields.nums));
   }
 
@@ -221,6 +241,7 @@ function itemCard(it) {
 }
 
 function renderOrder() {
+  confirming = false;
   const v = $('viewOrder');
   v.replaceChildren(
     el('div', { class: 'notice', text: '欲しい商品を選んで「カートに追加」→ 下の「注文内容を確認」で完了です。キャンセルは11/15まで、このページの「確認・キャンセル」からできます。' }),
@@ -241,8 +262,29 @@ function total() {
   return { t, unknown };
 }
 
+function renderSheet() {
+  const list = $('sheetList');
+  list.replaceChildren(...cart.map((l, i) => el('div', { class: 'cartline' },
+    el('div', { text: lineLabel(l) }),
+    el('button', { class: 'x', text: '削除', onclick: () => { cart.splice(i, 1); updateBar(); } })
+  )));
+  if (!cart.length) list.append(el('div', { class: 'empty', text: 'まだ何も入っていません' }));
+}
+
+let sheetOpen = false;
+function setSheet(open) {
+  sheetOpen = open && cart.length > 0;
+  $('sheet').classList.toggle('hidden', !sheetOpen);
+  $('bar').classList.toggle('open', sheetOpen);
+  if (sheetOpen) $('sheet').style.setProperty('--barh', $('bar').offsetHeight + 'px');
+}
+document.addEventListener('click', (e) => { if (e.target.closest('.bar .sum')) setSheet(!sheetOpen); });
+
 function updateBar() {
-  $('bar').classList.toggle('hidden', !cart.length);
+  renderSheet();
+  if (!cart.length) setSheet(false);
+  else if (sheetOpen) setSheet(true);
+  $('bar').classList.toggle('hidden', !cart.length || confirming);
   const n = cart.reduce((a, l) => a + l.qty, 0);
   $('barCount').textContent = 'カート ' + n + '点';
   const { t, unknown } = total();
@@ -253,6 +295,9 @@ $('barBtn').onclick = () => renderConfirm();
 
 function renderConfirm() {
   const v = $('viewOrder');
+  confirming = true;
+  setSheet(false);
+  $('bar').classList.add('hidden');
   const err = el('div', { class: 'err' });
   const nameInput = el('input', { type: 'text', placeholder: '例）山田 太郎', value: customerName, maxlength: '30', autocomplete: 'name' });
   const { t, unknown } = total();
