@@ -59,6 +59,8 @@
   .sumrows .grand{font-size:17px;font-weight:800;border-top:1px solid var(--line);margin-top:4px;padding-top:6px}
   .disc{color:var(--pink)}
   .stat-badge{display:inline-block;background:#fff0f8;color:var(--pink);font-weight:700;font-size:12px;padding:3px 10px;border-radius:99px;margin:0 0 10px}
+  .modal .box.wide{max-width:760px;max-height:92vh;overflow:auto}
+  .modal img.chart{width:100%;display:block;border:1px solid var(--line);border-radius:8px;margin-top:8px}
   .lnk{color:var(--green);font-weight:700;text-decoration:underline;cursor:pointer}
   .dtable{width:100%;border-collapse:collapse;font-size:15px;margin-top:8px}
   .dtable td{padding:7px 4px;border-bottom:1px solid var(--line)}
@@ -240,7 +242,7 @@ function itemCard(it) {
   }
 
   body.append(el('div', { class: 'row' },
-    el('div', {}, el('label', { text: 'サイズ' }), (fields.size = el('select', {}, el('option', { value: '', text: '選択' }), it.sizes.map((s) => el('option', { value: s, text: s }))))),
+    el('div', {}, el('label', {}, 'サイズ ', el('a', { class: 'lnk', text: 'サイズ表', onclick: (e) => { e.preventDefault(); openSizeChart(); } })), (fields.size = el('select', {}, el('option', { value: '', text: '選択' }), sizeOptions(it)))),
     el('div', {}, el('label', { text: '数量' }), (fields.qty = el('select', {}, [1, 2, 3, 4, 5].map((n) => el('option', { value: n, text: n + '点' })))))
   ));
 
@@ -277,6 +279,7 @@ function renderOrder() {
   const v = $('viewOrder');
   v.replaceChildren(
     el('div', { class: 'notice', text: '欲しい商品を選んで「カートに追加」→ 下の「注文内容を確認」で完了です。キャンセルは11/15まで、このページの「注文書・キャンセル」からできます。' }),
+    el('div', { class: 'hint', style: 'margin:-6px 0 14px' }, 'サイズに迷ったら ', el('a', { class: 'lnk', text: 'サイズ表を見る', onclick: (e) => { e.preventDefault(); openSizeChart(); } })),
     discNote(),
     ...CONFIG.items.map(itemCard)
   );
@@ -311,6 +314,27 @@ function total() {
   const D = CONFIG.discount || {};
   const disc = unknown ? 0 : calcDisc(D, pieces, sub);
   return { sub, disc, t: sub - disc, unknown, pieces, provisional, label: D.label || '会員特別割引' };
+}
+
+function sizeOptions(it) {
+  const groups = CONFIG.sizeGroups || [];
+  if (!groups.length) return it.sizes.map((s) => el('option', { value: s, text: s }));
+  return groups.map((g) => {
+    const ss = g.sizes.filter((s) => it.sizes.indexOf(s) >= 0);
+    return ss.length ? el('optgroup', { label: g.label }, ss.map((s) => el('option', { value: s, text: s }))) : null;
+  });
+}
+
+function openSizeChart() {
+  const close = () => modal.remove();
+  const modal = el('div', { class: 'modal', onclick: (e) => { if (e.target === modal) close(); } }, el('div', { class: 'box wide' },
+    el('h3', { text: 'サイズ表' }),
+    el('div', { class: 'hint', text: '表の身長は、着用モデルの身長です。サイズに迷うときは、運営までお気軽にご相談ください。' }),
+    el('img', { class: 'chart', src: 'sizechart.webp', alt: 'サイズ表（キッズ100〜7L）' }),
+    el('a', { class: 'lnk', style: 'display:inline-block;margin-top:8px', href: 'sizechart.webp', target: '_blank', rel: 'noopener', text: '画像を大きく開く' }),
+    el('button', { class: 'btn', text: '閉じる', onclick: close })
+  ));
+  document.body.append(modal);
 }
 
 function discNote(style) {

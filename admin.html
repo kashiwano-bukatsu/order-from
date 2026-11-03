@@ -82,6 +82,8 @@
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbz_5TfUEjFaLjdi1MXQXOt2TibdbfwBh9NhGJ8EbOJSYzxivu3ObuTi9cK3lT8ik8CU/exec';
 
 const $ = (id) => document.getElementById(id);
+const SIZE_ORDER = ['100','110','120','130','140','150','WM','WL','SS','S','M','L','LL','3L','4L','5L','6L','7L'];
+const sizeIdx = (s) => { const i = SIZE_ORDER.indexOf(s); return i < 0 ? 99 : i; };
 let DISC = {}, PASS = '', ROWS = [], tab = 'orders', q = '', filter = 'all';
 
 function el(tag, attrs, ...kids) {
@@ -309,7 +311,7 @@ function aggregate() {
     if (!m.has(key)) m.set(key, { item: l.item, color: l.color, logo: l.logo, size: l.size, qty: 0 });
     m.get(key).qty += l.qty;
   });
-  return [...m.values()].sort((a, b) => (a.item + a.color + a.logo).localeCompare(b.item + b.color + b.logo, 'ja') || a.size.localeCompare(b.size, 'ja', { numeric: true }));
+  return [...m.values()].sort((a, b) => (a.item + a.color + a.logo).localeCompare(b.item + b.color + b.logo, 'ja') || sizeIdx(a.size) - sizeIdx(b.size));
 }
 function aggView() {
   const rows = aggregate();
