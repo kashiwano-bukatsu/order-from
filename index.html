@@ -51,6 +51,19 @@
   .sheet h3{margin:0 0 4px;font-size:15px}
   .sheet .inner{max-width:560px;margin:0 auto}
   .sheet .empty{color:var(--mute);font-size:14px;padding:10px 0}
+  .agree{display:flex;gap:10px;align-items:flex-start;font-weight:700;font-size:14px;margin:10px 0 0}
+  .agree input{width:22px;height:22px;flex:none;margin:0}
+  .policy{background:#f5f7f4;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;white-space:pre-line;margin-top:6px}
+  .sumrows{margin-top:10px;font-size:14px}
+  .sumrows div{display:flex;justify-content:space-between;padding:2px 0}
+  .sumrows .grand{font-size:17px;font-weight:800;border-top:1px solid var(--line);margin-top:4px;padding-top:6px}
+  .disc{color:var(--pink)}
+  .no{font-size:24px;font-weight:800;letter-spacing:.08em;color:var(--green);margin:4px 0 8px}
+  .modal{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;padding:20px;z-index:20}
+  .modal .box{background:#fff;border-radius:16px;padding:20px;width:100%;max-width:420px}
+  .modal h3{margin:0 0 8px;font-size:18px}
+  .modal .btns{display:flex;gap:10px;margin-top:16px}
+  .modal .btns .btn{margin-top:0}
   .notice{background:#fff8e1;border:1px solid #f0dd9a;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:16px}
   .done{text-align:center;padding:30px 10px}
   .done .no{font-size:30px;font-weight:800;letter-spacing:.05em;color:var(--green);margin:6px 0}
@@ -62,13 +75,13 @@
 <header>
   <div class="tag">1st ANNIVERSARY</div>
   <h1>カシワのBUKATSU<br>1周年記念グッズ 注文フォーム</h1>
-  <p>受付は <b>11/15（日）まで</b>／支払いは練習日に現金手渡し</p>
+  <p>受付は <b>11/15（日）23:59</b> まで</p>
 </header>
 
 <main>
   <div class="tabs">
     <button id="tabOrder" class="on">注文する</button>
-    <button id="tabCheck">確認・キャンセル</button>
+    <button id="tabCheck">注文書・キャンセル</button>
   </div>
   <div id="loading" class="closed">読み込み中…</div>
   <div id="viewOrder" class="hidden"></div>
@@ -93,6 +106,7 @@ let customerName = '';
 let confirming = false;
 let NUM_COUNTS = {};
 
+const isClosedNow = () => !!(CONFIG && CONFIG.deadline && new Date() > new Date(CONFIG.deadline));
 const yen = (n) => '¥' + Number(n).toLocaleString('ja-JP');
 const priceText = (it) => it.price == null ? '価格は後日お知らせ' : yen(it.price);
 
@@ -132,16 +146,23 @@ async function init() {
       showClosed();
     } else {
       renderOrder();
-      show('order');
     }
-    renderCheck(data.closed);
+    show('order');
+    renderCheck();
   } catch (e) {
     $('loading').textContent = '読み込みに失敗しました。通信状況を確認して、ページを再読み込みしてください。';
   }
 }
 
 function showClosed() {
-  $('viewOrder').replaceChildren(el('div', { class: 'closed', text: 'ご注文の受付は終了しました。ご不明点は運営までご連絡ください。' }));
+  confirming = true;
+  cart = [];
+  setSheet(false);
+  $('bar').classList.add('hidden');
+  $('viewOrder').replaceChildren(el('div', { class: 'card' }, el('div', { class: 'body closed' },
+    el('h2', { text: 'ご注文の受付は終了しました' }),
+    el('p', { text: '受付期間は11/15（日）23:59まででした。ご注文済みの方は、上の「注文書・キャンセル」から注文書を確認できます。ご不明点は運営までご連絡ください。' })
+  )));
 }
 
 function show(which) {
@@ -244,7 +265,7 @@ function renderOrder() {
   confirming = false;
   const v = $('viewOrder');
   v.replaceChildren(
-    el('div', { class: 'notice', text: '欲しい商品を選んで「カートに追加」→ 下の「注文内容を確認」で完了です。キャンセルは11/15まで、このページの「確認・キャンセル」からできます。' }),
+    el('div', { class: 'notice', text: '欲しい商品を選んで「カートに追加」→ 下の「注文内容を確認」で完了です。キャンセルは11/15まで、このページの「注文書・キャンセル」からできます。' }),
     ...CONFIG.items.map(itemCard)
   );
 }
@@ -254,12 +275,18 @@ function lineLabel(l) {
 }
 
 function total() {
-  let t = 0, unknown = false;
+  let sub = 0, unknown = false;
   cart.forEach((l) => {
     const it = CONFIG.items.find((i) => i.id === l.itemId);
-    if (it.price == null) unknown = true; else t += it.price * l.qty;
+    if (it.price == null) unknown = true; else sub += it.price * l.qty;
   });
-  return { t, unknown };
+  const D = CONFIG.discount || {};
+  let disc = 0;
+  if (!unknown && D.enabled) {
+    const val = Number(D.value) || 0;
+    disc = D.type === 'yen' ? Math.min(val, sub) : Math.floor(sub * val / 100);
+  }
+  return { sub, disc, t: sub - disc, unknown, label: D.label || '会員特別割引' };
 }
 
 function renderSheet() {
@@ -291,52 +318,115 @@ function updateBar() {
   $('barTotal').textContent = unknown ? '金額は後日お知らせ' : yen(t);
 }
 
-$('barBtn').onclick = () => renderConfirm();
+$('barBtn').onclick = () => { if (isClosedNow()) { showClosed(); show('order'); return; } renderConfirm(); };
+
+const KANA_RE = /^[ァ-ヶー・]+( [ァ-ヶー・]+)+$/;
+const DEFAULT_PAY = '商品代金は、商品のお引き渡し時にお支払いいただきます。金額が決まり次第、改めてご案内いたします。';
+const DEFAULT_CANCEL = '・注文のキャンセルは11/15（日）23:59まで、このページの「注文書・キャンセル」からできます。\n・受付期間を過ぎた後や、商品の受け渡し後のキャンセル・変更は、運営までご連絡ください。';
 
 function renderConfirm() {
   const v = $('viewOrder');
   confirming = true;
   setSheet(false);
   $('bar').classList.add('hidden');
+  const T = CONFIG.texts || {};
+  const events = CONFIG.events || [];
+  const evSel = new Set();
   const err = el('div', { class: 'err' });
-  const nameInput = el('input', { type: 'text', placeholder: '例）山田 太郎', value: customerName, maxlength: '30', autocomplete: 'name' });
-  const { t, unknown } = total();
-  const sendBtn = el('button', { class: 'btn', text: 'この内容で注文する' });
+  const nameInput = el('input', { type: 'text', placeholder: 'ヤマダ タロウ', value: customerName, maxlength: '30', autocomplete: 'off' });
+  const tt = total();
 
   const list = el('div', {});
   const draw = () => {
     list.replaceChildren(...cart.map((l, i) => el('div', { class: 'cartline' },
       el('div', { text: lineLabel(l) }),
-      el('button', { class: 'x', text: '削除', onclick: () => { cart.splice(i, 1); updateBar(); cart.length ? draw() : (renderOrder(), show('order')); } })
+      el('button', { class: 'x', text: '削除', onclick: () => { cart.splice(i, 1); updateBar(); cart.length ? renderConfirm() : (renderOrder(), show('order')); } })
     )));
   };
   draw();
 
-  v.replaceChildren(el('div', { class: 'card' }, el('div', { class: 'body' },
+  const sumRows = el('div', { class: 'sumrows' });
+  if (tt.unknown) {
+    sumRows.append(el('div', { class: 'grand' }, el('span', { text: '合計' }), el('span', { text: '金額は決まり次第お知らせします' })));
+  } else {
+    sumRows.append(el('div', {}, el('span', { text: '小計' }), el('span', { text: yen(tt.sub) })));
+    if (tt.disc > 0) sumRows.append(el('div', { class: 'disc' }, el('span', { text: tt.label }), el('span', { text: '-' + yen(tt.disc) })));
+    sumRows.append(el('div', { class: 'grand' }, el('span', { text: '合計' }), el('span', { text: yen(tt.t) })));
+  }
+
+  const kids = [
     el('h2', { text: '注文内容の確認' }),
-    list,
-    el('div', { class: 'price', style: 'margin-top:10px', text: unknown ? '合計：金額は決まり次第お知らせします' : '合計：' + yen(t) }),
-    el('label', { text: 'お名前（フルネーム）' }),
-    nameInput,
-    el('div', { class: 'hint', style: 'margin-top:6px', text: '※ 支払いは練習日に現金手渡し。キャンセル時にお名前が必要です。' }),
-    err, sendBtn,
-    el('button', { class: 'btn sub', text: '← 商品選択に戻る', onclick: () => { renderOrder(); show('order'); } })
-  )));
+    list, sumRows,
+    el('label', {}, 'お名前 ', el('span', { class: 'hint', text: 'カタカナ・フルネーム（姓と名の間にスペース）' })),
+    nameInput
+  ];
+
+  if (events.length) {
+    const chips = el('div', { class: 'chips' }, ...events.map((e) => {
+      const chip = el('div', { class: 'chip', text: e });
+      chip.onclick = () => { evSel.has(e) ? evSel.delete(e) : evSel.add(e); chip.classList.toggle('on'); };
+      return chip;
+    }));
+    kids.push(el('label', {}, '参加種目 ', el('span', { class: 'hint', text: '（複数選択可）' })), chips);
+  }
+
+  const payCheck = el('input', { type: 'checkbox' });
+  const canCheck = el('input', { type: 'checkbox' });
+  kids.push(
+    el('label', { text: 'お支払いについて' }),
+    el('div', { class: 'policy', text: T.payment || DEFAULT_PAY }),
+    el('label', { class: 'agree' }, payCheck, el('span', { text: 'お支払いについて同意します' })),
+    el('label', { text: 'キャンセルポリシー' }),
+    el('div', { class: 'policy', text: T.cancel || DEFAULT_CANCEL }),
+    el('label', { class: 'agree' }, canCheck, el('span', { text: 'キャンセルポリシーに同意します' })),
+    err
+  );
+  const goBtn = el('button', { class: 'btn', text: '注文内容を最終確認へ' });
+  kids.push(goBtn, el('button', { class: 'btn sub', text: '← 商品選択に戻る', onclick: () => { renderOrder(); show('order'); } }));
+  v.replaceChildren(el('div', { class: 'card' }, el('div', { class: 'body' }, ...kids)));
   window.scrollTo(0, 0);
 
-  sendBtn.onclick = async () => {
-    customerName = nameInput.value.trim();
-    if (!customerName) return (err.textContent = 'お名前を入力してください');
-    sendBtn.disabled = true; sendBtn.textContent = '送信中…'; err.textContent = '';
+  goBtn.onclick = () => {
+    if (isClosedNow()) { showClosed(); show('order'); return; }
+    err.textContent = '';
+    const name = nameInput.value.trim().replace(/[ 　]+/g, ' ');
+    if (!KANA_RE.test(name)) return (err.textContent = 'お名前はカタカナのフルネームで入力してください（姓と名の間にスペース）');
+    if (events.length && !evSel.size) return (err.textContent = '参加種目を選んでください');
+    if (!payCheck.checked) return (err.textContent = 'お支払いについての同意にチェックしてください');
+    if (!canCheck.checked) return (err.textContent = 'キャンセルポリシーの同意にチェックしてください');
+    customerName = name;
+    openFinal(name, [...evSel], tt);
+  };
+}
+
+function openFinal(name, evs, tt) {
+  const close = () => modal.remove();
+  const msg = el('div', { class: 'err' });
+  const ok = el('button', { class: 'btn', text: '確定する' });
+  const back = el('button', { class: 'btn sub', text: '戻る', onclick: close });
+  const modal = el('div', { class: 'modal' }, el('div', { class: 'box' },
+    el('h3', { text: 'この内容で注文を確定しますか？' }),
+    el('div', { text: 'お名前：' + name }),
+    evs.length ? el('div', { text: '参加種目：' + evs.join('、') }) : null,
+    el('div', { text: '合計：' + (tt.unknown ? '金額は決まり次第お知らせします' : yen(tt.t)) }),
+    el('div', { class: 'hint', style: 'margin-top:8px', text: '確定後のキャンセルは、受付期間内なら「注文書・キャンセル」から行えます。' }),
+    msg,
+    el('div', { class: 'btns' }, back, ok)
+  ));
+  document.body.append(modal);
+  ok.onclick = async () => {
+    if (isClosedNow()) { close(); showClosed(); show('order'); return; }
+    ok.disabled = true; back.disabled = true; ok.textContent = '送信中…'; msg.textContent = '';
     try {
-      const r = await api({ action: 'order', name: customerName, lines: cart });
+      const r = await api({ action: 'order', name, events: evs, agreed: true, lines: cart });
       if (!r.ok) throw new Error(r.error);
-      try { localStorage.setItem('bk_last', JSON.stringify({ id: r.orderId, name: customerName })); } catch (e) {}
+      try { localStorage.setItem('bk_last', JSON.stringify({ id: r.orderId, name })); } catch (e) {}
       cart = []; updateBar();
+      close();
       renderDone(r.orderId);
     } catch (e) {
-      err.textContent = e.message || '送信に失敗しました。もう一度お試しください。';
-      sendBtn.disabled = false; sendBtn.textContent = 'この内容で注文する';
+      msg.textContent = e.message || '送信に失敗しました。もう一度お試しください。';
+      ok.disabled = false; back.disabled = false; ok.textContent = '確定する';
     }
   };
 }
@@ -345,50 +435,73 @@ function renderDone(id) {
   $('viewDone').replaceChildren(el('div', { class: 'card' }, el('div', { class: 'body done' },
     el('div', { text: 'ご注文ありがとうございます！' }),
     el('div', { class: 'no', text: id }),
-    el('p', { text: 'この注文番号はキャンセル・確認時に使います。スクリーンショットで保存してください。' }),
-    el('p', { text: '商品は練習日にお渡しします。お支払いはその際に現金でお願いします。' }),
+    el('p', { text: 'この注文番号（5桁）とお名前で、「注文書・キャンセル」から注文書を見られます。スクリーンショットで保存しておくと安心です。' }),
+    el('p', { text: '商品代金は、商品のお引き渡し時にお支払いいただきます。' }),
     el('button', { class: 'btn sub', text: 'もう一度注文する', onclick: () => { renderOrder(); show('order'); } })
   )));
   show('done');
 }
 
-/* ---------- 確認・キャンセル ---------- */
-function renderCheck(closed) {
+/* ---------- 注文書・キャンセル ---------- */
+function renderCheck() {
   let last = {};
   try { last = JSON.parse(localStorage.getItem('bk_last') || '{}'); } catch (e) {}
-  const idIn = el('input', { type: 'text', placeholder: 'BK-0001', value: last.id || '', autocapitalize: 'characters' });
-  const nameIn = el('input', { type: 'text', placeholder: '注文時のお名前', value: last.name || '' });
+  const idIn = el('input', { type: 'text', inputmode: 'numeric', maxlength: '5', placeholder: '12345', value: last.id || '' });
+  const nameIn = el('input', { type: 'text', placeholder: 'ヤマダ タロウ', value: last.name || '' });
   const err = el('div', { class: 'err' });
   const out = el('div', {});
-  const btn = el('button', { class: 'btn', text: '注文を確認する' });
+  const btn = el('button', { class: 'btn', text: '注文書を見る' });
+
+  const kv = (k, val) => el('div', {}, el('span', { text: k }), el('span', { text: val }));
 
   btn.onclick = async () => {
-    err.textContent = ''; out.replaceChildren(); btn.disabled = true;
+    err.textContent = ''; out.replaceChildren();
+    const id = idIn.value.normalize('NFKC').trim();
+    const name = nameIn.value.trim().replace(/[ 　]+/g, ' ');
+    if (!/^\d{5}$/.test(id)) return (err.textContent = '注文番号は5桁の数字です');
+    if (!KANA_RE.test(name)) return (err.textContent = 'お名前はカタカナのフルネームで入力してください（姓と名の間にスペース）');
+    btn.disabled = true;
     try {
-      const r = await api({ action: 'lookup', orderId: idIn.value, name: nameIn.value });
+      const r = await api({ action: 'lookup', orderId: id, name });
       if (!r.ok) throw new Error(r.error);
       const active = r.lines.filter((l) => l.state !== 'キャンセル');
-      out.append(el('div', { class: 'card', style: 'margin-top:14px' }, el('div', { class: 'body' },
-        el('h2', { text: '注文内容' }),
-        r.lines.map((l) => el('div', { class: 'cartline' }, el('div', { text: lineLabel({ itemName: l.item, color: l.color, logo: l.logo, printName: l.printName, numbers: l.numbers.length ? l.numbers : null, size: l.size, qty: l.qty }) }), el('span', { text: l.state }))),
-        active.length && !r.closed ? el('button', { class: 'btn danger', text: 'この注文をキャンセルする', onclick: async (ev) => {
+      const closedNow = r.closed || isClosedNow();
+      const rows = el('div', { class: 'sumrows' },
+        kv('お名前', r.name),
+        kv('受付日時', r.placedAt),
+        r.events ? kv('参加種目', r.events) : null,
+        kv('状態', active.length ? '受付済み' : 'キャンセル済み')
+      );
+      const items = r.lines.map((l) => el('div', { class: 'cartline', style: l.state === 'キャンセル' ? 'text-decoration:line-through;color:var(--mute)' : '' },
+        el('div', { text: lineLabel({ itemName: l.item, color: l.color, logo: l.logo, printName: l.printName, numbers: l.numbers.length ? l.numbers : null, size: l.size, qty: l.qty }) })));
+      const slip = el('div', { class: 'card', style: 'margin-top:14px' }, el('div', { class: 'body' },
+        el('h2', { text: '注文書' }),
+        el('div', { class: 'no', text: '注文番号 ' + r.orderId }),
+        rows,
+        el('label', { text: 'ご注文内容' }),
+        ...items,
+        el('div', { class: 'sumrows' }, el('div', { class: 'grand' }, el('span', { text: '合計' }), el('span', { text: active.length ? (r.total == null ? '金額は決まり次第お知らせします' : yen(r.total)) : '—' }))),
+        el('div', { class: 'hint', style: 'margin-top:8px', text: '商品代金は、商品のお引き渡し時にお支払いいただきます。' }),
+        active.length && !closedNow ? el('button', { class: 'btn danger', text: 'この注文をキャンセルする', onclick: async (ev) => {
           if (!confirm('この注文をすべてキャンセルします。よろしいですか？')) return;
           ev.target.disabled = true;
           try {
-            const c = await api({ action: 'cancel', orderId: idIn.value, name: nameIn.value });
+            const c = await api({ action: 'cancel', orderId: id, name });
             if (!c.ok) throw new Error(c.error);
-            out.replaceChildren(el('div', { class: 'notice', text: 'キャンセルしました。' }));
+            out.replaceChildren(el('div', { class: 'notice', style: 'margin-top:14px', text: 'キャンセルしました。' }));
           } catch (e) { err.textContent = e.message; ev.target.disabled = false; }
-        } }) : (active.length ? el('div', { class: 'hint', style: 'margin-top:10px', text: '受付期間を過ぎたため、変更は運営までご連絡ください。' }) : null)
-      )));
+        } }) : (active.length ? el('div', { class: 'hint', style: 'margin-top:10px', text: '受付期間を過ぎたため、変更・キャンセルは運営までご連絡ください。' }) : null)
+      ));
+      out.append(slip);
     } catch (e) { err.textContent = e.message || '失敗しました'; }
     btn.disabled = false;
   };
 
   $('viewCheck').replaceChildren(el('div', { class: 'card' }, el('div', { class: 'body' },
-    el('h2', { text: '注文の確認・キャンセル' }),
-    el('label', { text: '注文番号' }), idIn,
-    el('label', { text: 'お名前' }), nameIn,
+    el('h2', { text: '注文書・キャンセル' }),
+    el('div', { class: 'hint', text: '注文番号（5桁）とお名前（カタカナ）で、ご自身の注文書を見られます。' }),
+    el('label', { text: '注文番号（5桁）' }), idIn,
+    el('label', { text: 'お名前（カタカナ・フルネーム）' }), nameIn,
     err, btn
   )), out);
 }
