@@ -58,6 +58,11 @@
   .sumrows div{display:flex;justify-content:space-between;padding:2px 0}
   .sumrows .grand{font-size:17px;font-weight:800;border-top:1px solid var(--line);margin-top:4px;padding-top:6px}
   .disc{color:var(--pink)}
+  .stat-badge{display:inline-block;background:#fff0f8;color:var(--pink);font-weight:700;font-size:12px;padding:3px 10px;border-radius:99px;margin:0 0 10px}
+  .lnk{color:var(--green);font-weight:700;text-decoration:underline;cursor:pointer}
+  .dtable{width:100%;border-collapse:collapse;font-size:15px;margin-top:8px}
+  .dtable td{padding:7px 4px;border-bottom:1px solid var(--line)}
+  .dtable td:last-child{text-align:right;font-weight:700;color:var(--pink)}
   .no{font-size:24px;font-weight:800;letter-spacing:.08em;color:var(--green);margin:4px 0 8px}
   .modal{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;padding:20px;z-index:20}
   .modal .box{background:#fff;border-radius:16px;padding:20px;width:100%;max-width:420px}
@@ -105,6 +110,7 @@ let cart = [];
 let customerName = '';
 let confirming = false;
 let NUM_COUNTS = {};
+let ITEM_STATS = {};
 
 const isClosedNow = () => !!(CONFIG && CONFIG.deadline && new Date() > new Date(CONFIG.deadline));
 const yen = (n) => '¥' + Number(n).toLocaleString('ja-JP');
@@ -138,6 +144,7 @@ async function init() {
     const data = await res.json();
     CONFIG = data.config;
     NUM_COUNTS = data.numberCounts || {};
+    ITEM_STATS = data.itemStats || {};
     // 表示順：半袖 → ロングT → リバーシブル（ユニフォーム）
     const ORDER = ['tee', 'long', 'uniform'];
     CONFIG.items.sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
@@ -202,6 +209,9 @@ function itemCard(it) {
   card.append(el('img', { src: IMG[it.id], alt: it.name, loading: 'lazy' }));
   const body = el('div', { class: 'body' });
   body.append(el('h2', { text: it.name }), el('div', { class: 'price', text: priceText(it) }));
+  if (ITEM_STATS[it.id] != null) {
+    body.append(el('div', { class: 'stat-badge', text: '現在の注文：' + ITEM_STATS[it.id] + '枚' }));
+  }
   if (it.priceNote) body.append(el('div', { class: 'hint', style: 'margin:-6px 0 8px', text: it.priceNote }));
 
   const fields = {};
@@ -267,6 +277,7 @@ function renderOrder() {
   const v = $('viewOrder');
   v.replaceChildren(
     el('div', { class: 'notice', text: '欲しい商品を選んで「カートに追加」→ 下の「注文内容を確認」で完了です。キャンセルは11/15まで、このページの「注文書・キャンセル」からできます。' }),
+    discNote(),
     ...CONFIG.items.map(itemCard)
   );
 }
@@ -300,6 +311,37 @@ function total() {
   const D = CONFIG.discount || {};
   const disc = unknown ? 0 : calcDisc(D, pieces, sub);
   return { sub, disc, t: sub - disc, unknown, pieces, provisional, label: D.label || '会員特別割引' };
+}
+
+function discNote(style) {
+  const D = CONFIG.discount || {};
+  if (!D.enabled) return null;
+  return el('div', { class: style || 'notice' },
+    '※ カシワのBUKATSU会員様は、会員割引が自動で適用されます。',
+    el('a', { class: 'lnk', text: '詳しくはこちら', onclick: (e) => { e.preventDefault(); openDiscountInfo(); } })
+  );
+}
+
+function openDiscountInfo() {
+  const D = CONFIG.discount || {};
+  const rows = [];
+  if (D.type === 'tiered') {
+    for (let n = 1; n <= D.tiers.length + 3; n++) {
+      rows.push([n === D.tiers.length + 3 ? n + '枚以上は同様に…' : n + '枚', n === D.tiers.length + 3 ? '' : yen(calcDisc(D, n, 1e9))]);
+    }
+  } else {
+    rows.push(['ご注文全体', D.type === 'yen' ? yen(D.value) + '引き' : D.value + '％引き']);
+  }
+  const close = () => modal.remove();
+  const modal = el('div', { class: 'modal', onclick: (e) => { if (e.target === modal) close(); } }, el('div', { class: 'box' },
+    el('h3', { text: '会員割引について' }),
+    el('div', { class: 'hint', text: 'カシワのBUKATSU会員様は、合計金額から下記の金額が自動で引かれます。' }),
+    el('table', { class: 'dtable' }, ...rows.map(([a, b]) => el('tr', {}, el('td', { text: a }), el('td', { text: b })))),
+    D.type === 'tiered' ? el('div', { class: 'hint', style: 'margin-top:8px', text: 'それ以降は、1枚増えるごとに' + yen(D.extra) + 'ずつ割引額が増えます。' }) : null,
+    el('div', { class: 'hint', style: 'margin-top:6px', text: '割引は、ご注文全体の合計枚数で計算します（商品の種類は問いません）。' }),
+    el('button', { class: 'btn', text: '閉じる', onclick: close })
+  ));
+  document.body.append(modal);
 }
 
 function renderSheet() {
@@ -370,7 +412,7 @@ function renderConfirm() {
 
   const kids = [
     el('h2', { text: '注文内容の確認' }),
-    list, sumRows,
+    list, sumRows, discNote('hint'),
     el('label', {}, 'お名前 ', el('span', { class: 'hint', text: 'カタカナ・フルネーム（姓と名の間にスペース）' })),
     nameInput
   ];
