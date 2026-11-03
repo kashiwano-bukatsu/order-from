@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>注文管理｜カシワのBUKATSU</title>
+<style>
+  :root{--green:#1f6f43;--pink:#e0359e;--ink:#1c1f1d;--mute:#6b726d;--bg:#f5f7f4;--card:#fff;--line:#dfe5df;--err:#c0262d;--warn:#fff1f1}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-text-size-adjust:100%}
+  header{background:#123d26;color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+  header h1{margin:0;font-size:16px;flex:1}
+  header button{background:#ffffff22;color:#fff;border:0;border-radius:8px;padding:6px 10px;font-size:13px}
+  main{max-width:720px;margin:0 auto;padding:12px 12px 60px}
+  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tabs button{flex:1;padding:10px 4px;border:1px solid var(--line);background:#fff;border-radius:10px;font-size:14px;font-weight:700;color:var(--mute)}
+  .tabs button.on{background:var(--green);color:#fff;border-color:var(--green)}
+  input[type=text],input[type=password],select{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font-size:16px;background:#fff;color:var(--ink)}
+  .btn{display:block;width:100%;padding:13px;border:0;border-radius:12px;font-size:16px;font-weight:700;background:var(--green);color:#fff;margin-top:12px}
+  .btn.ghost{background:#fff;color:var(--green);border:1.5px solid var(--green)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+  .card.cancel{opacity:.55}
+  .card.warn{background:var(--warn);border-color:#f0b8b8}
+  .head{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+  .head b{font-size:16px}
+  .id{font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums}
+  .sub{color:var(--mute);font-size:12px}
+  .line{font-size:13px;padding:4px 0;border-top:1px dashed var(--line)}
+  .line:first-of-type{margin-top:6px}
+  .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .tog{padding:7px 12px;border-radius:99px;border:1.5px solid var(--line);background:#fff;font-size:13px;font-weight:700;color:var(--mute)}
+  .tog.on{background:var(--green);border-color:var(--green);color:#fff}
+  .tog.danger{color:var(--err);border-color:var(--err);margin-left:auto}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+  .chip{padding:5px 10px;border-radius:99px;border:1.5px solid var(--line);background:#fff;font-size:13px;cursor:pointer}
+  .chip.on{background:var(--green);border-color:var(--green);color:#fff;font-weight:700}
+  .chip.hot{border-color:var(--pink)}
+  .stats{display:flex;gap:8px;margin:8px 0 12px;flex-wrap:wrap}
+  .stat{flex:1;min-width:90px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .stat b{display:block;font-size:18px}
+  .stat span{font-size:11px;color:var(--mute)}
+  .row2{display:flex;gap:8px;align-items:center}
+  .row2>*{flex:1}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  h3{margin:14px 0 4px;font-size:15px}
+  .err{color:var(--err);font-size:13px;margin-top:8px;min-height:1em}
+  .hidden{display:none}
+  .toast{position:fixed;left:12px;right:12px;bottom:16px;background:#222;color:#fff;border-radius:10px;padding:10px 14px;font-size:14px;z-index:20;text-align:center}
+</style>
+</head>
+<body>
+<div id="login" style="max-width:380px;margin:80px auto;padding:0 20px">
+  <h2 style="margin:0 0 6px">注文管理</h2>
+  <div class="sub" style="margin-bottom:14px">カシワのBUKATSU 1周年記念グッズ</div>
+  <input type="password" id="pass" placeholder="合言葉" autocomplete="current-password">
+  <button class="btn" id="loginBtn">ひらく</button>
+  <div class="err" id="loginErr"></div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1>注文管理</h1>
+    <button id="reload">更新</button>
+    <button id="logout">ログアウト</button>
+  </header>
+  <main>
+    <div class="tabs">
+      <button data-t="orders" class="on">注文</button>
+      <button data-t="nums">背番号</button>
+      <button data-t="agg">発注数</button>
+    </div>
+    <div id="ctl"></div>
+    <div id="list"></div>
+  </main>
+</div>
+<div id="toast" class="toast hidden"></div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbz_5TfUEjFaLjdi1MXQXOt2TibdbfwBh9NhGJ8EbOJSYzxivu3ObuTi9cK3lT8ik8CU/exec';
+
+const $ = (id) => document.getElementById(id);
+let PASS = '', ROWS = [], tab = 'orders', q = '', filter = 'all';
+
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const k in (attrs || {})) {
+    if (k === 'class') e.className = attrs[k];
+    else if (k === 'text') e.textContent = attrs[k];
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), attrs[k]);
+    else e.setAttribute(k, attrs[k]);
+  }
+  kids.flat().forEach((c) => c != null && c !== false && e.append(c));
+  return e;
+}
+const yen = (n) => '¥' + Number(n).toLocaleString('ja-JP');
+const norm = (s) => String(s || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+
+async function api(body) {
+  const res = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  return res.json();
+}
+let toastTimer;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.remove('hidden');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add('hidden'), 3500);
+}
+
+/* ---------- ログイン ---------- */
+async function load() {
+  const r = await api({ action: 'adminList', pass: PASS });
+  if (!r.ok) throw new Error(r.error);
+  ROWS = r.rows;
+}
+async function enter() {
+  await load();
+  try { sessionStorage.setItem('adm', PASS); } catch (e) {}
+  $('login').classList.add('hidden'); $('app').classList.remove('hidden');
+  buildTab();
+}
+$('loginBtn').onclick = async () => {
+  PASS = $('pass').value; $('loginErr').textContent = '';
+  if (!PASS) return;
+  $('loginBtn').disabled = true;
+  try { await enter(); } catch (e) { $('loginErr').textContent = e.message || '失敗しました'; }
+  $('loginBtn').disabled = false;
+};
+$('pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
+$('logout').onclick = () => { try { sessionStorage.removeItem('adm'); } catch (e) {} location.reload(); };
+$('reload').onclick = async () => { try { await load(); renderList(); toast('更新しました'); } catch (e) { toast(e.message); } };
+document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
+  tab = b.dataset.t;
+  document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
+  buildTab();
+});
+let savedPass = '';
+try { savedPass = sessionStorage.getItem('adm') || ''; } catch (e) {}
+PASS = savedPass;
+enter().catch(() => {}); // 合言葉が未設定ならそのまま開く。必要なときだけログイン画面が残る
+
+/* ---------- データ整形 ---------- */
+function groupOrders() {
+  const m = new Map();
+  ROWS.forEach((r) => {
+    if (!m.has(r.orderId)) m.set(r.orderId, { id: r.orderId, name: r.name, placedAt: r.placedAt, events: r.events, lines: [] });
+    m.get(r.orderId).lines.push(r);
+  });
+  return [...m.values()].map((o) => {
+    const act = o.lines.filter((l) => l.state !== 'キャンセル');
+    o.active = act;
+    o.canceled = act.length === 0;
+    o.paid = act.length > 0 && act.every((l) => l.paid);
+    o.handed = act.length > 0 && act.every((l) => l.handed);
+    o.total = act.some((l) => l.subtotal == null) ? null : act.reduce((a, l) => a + l.subtotal, 0);
+    return o;
+  }).reverse();
+}
+function lineText(l) {
+  return [l.item, l.color, l.logo, l.printName && ('名前 ' + l.printName), 'サイズ ' + l.size, '×' + l.qty].filter(Boolean).join('　');
+}
+
+/* ---------- タブ ---------- */
+function buildTab() {
+  const ctl = $('ctl'); ctl.replaceChildren();
+  if (tab === 'orders') {
+    const search = el('input', { type: 'text', placeholder: '名前（カタカナ）または注文番号で検索', value: q });
+    search.oninput = () => { q = search.value; renderList(); };
+    const chips = el('div', { class: 'chips' });
+    [['all', 'すべて'], ['unpaid', '未入金'], ['unhanded', '未渡し'], ['canceled', 'キャンセル']].forEach(([k, label]) => {
+      const c = el('div', { class: 'chip' + (filter === k ? ' on' : ''), text: label });
+      c.onclick = () => { filter = k; chips.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x === c)); renderList(); };
+      chips.append(c);
+    });
+    ctl.append(search, chips);
+  } else if (tab === 'agg') {
+    ctl.append(el('button', { class: 'btn ghost', style: 'margin:0 0 10px', text: '集計をコピー（メーカー発注用）', onclick: copyAgg }));
+  }
+  renderList();
+}
+function renderList() {
+  const box = $('list');
+  if (tab === 'orders') box.replaceChildren(...ordersView());
+  else if (tab === 'nums') box.replaceChildren(...numsView());
+  else box.replaceChildren(...aggView());
+}
+
+/* ---------- 注文タブ ---------- */
+async function setFlag(o, field, value) {
+  const prev = o.lines.map((l) => l[field]);
+  o.active.forEach((l) => (l[field] = value)); renderList();
+  try {
+    const r = await api({ action: 'adminUpdate', pass: PASS, type: 'order', orderId: o.id, field, value });
+    if (!r.ok) throw new Error(r.error);
+  } catch (e) { o.lines.forEach((l, i) => (l[field] = prev[i])); renderList(); toast(e.message || '更新に失敗しました'); }
+}
+async function setState(o, value) {
+  const prev = o.lines.map((l) => l.state);
+  o.lines.forEach((l) => (l.state = value)); renderList();
+  try {
+    const r = await api({ action: 'adminUpdate', pass: PASS, type: 'state', orderId: o.id, value });
+    if (!r.ok) throw new Error(r.error);
+  } catch (e) { o.lines.forEach((l, i) => (l.state = prev[i])); renderList(); toast(e.message || '更新に失敗しました'); }
+}
+
+function ordersView() {
+  const all = groupOrders();
+  const act = all.filter((o) => !o.canceled);
+  const pieces = act.reduce((a, o) => a + o.active.reduce((b, l) => b + l.qty, 0), 0);
+  const unknown = act.some((o) => o.total == null);
+  const sum = act.reduce((a, o) => a + (o.total || 0), 0);
+  const stats = el('div', { class: 'stats' },
+    el('div', { class: 'stat' }, el('b', { text: act.length + '件' }), el('span', { text: '有効な注文' })),
+    el('div', { class: 'stat' }, el('b', { text: pieces + '点' }), el('span', { text: '合計数量' })),
+    el('div', { class: 'stat' }, el('b', { text: act.filter((o) => !o.paid).length + '件' }), el('span', { text: '未入金' })),
+    el('div', { class: 'stat' }, el('b', { text: act.filter((o) => !o.handed).length + '件' }), el('span', { text: '未渡し' })),
+    el('div', { class: 'stat' }, el('b', { text: unknown ? '価格未設定あり' : yen(sum) }), el('span', { text: '合計金額' }))
+  );
+  const nq = norm(q);
+  const shown = all.filter((o) => {
+    if (filter === 'unpaid' && (o.canceled || o.paid)) return false;
+    if (filter === 'unhanded' && (o.canceled || o.handed)) return false;
+    if (filter === 'canceled' && !o.canceled) return false;
+    if (nq && !(norm(o.name).includes(nq) || o.id.includes(nq))) return false;
+    return true;
+  });
+  const cards = shown.map((o) => el('div', { class: 'card' + (o.canceled ? ' cancel' : '') },
+    el('div', { class: 'head' }, el('b', { text: o.name }), el('span', { class: 'id', text: '#' + o.id })),
+    el('div', { class: 'sub', text: o.placedAt + (o.events ? '　参加種目：' + o.events : '') + (o.total != null && !o.canceled ? '　' + yen(o.total) : '') }),
+    ...o.lines.map((l) => el('div', { class: 'line', style: l.state === 'キャンセル' ? 'text-decoration:line-through;color:var(--mute)' : '', text: lineText(l) })),
+    el('div', { class: 'acts' },
+      o.canceled ? null : el('button', { class: 'tog' + (o.paid ? ' on' : ''), text: o.paid ? '✓ 入金済み' : '入金済みにする', onclick: () => setFlag(o, 'paid', !o.paid) }),
+      o.canceled ? null : el('button', { class: 'tog' + (o.handed ? ' on' : ''), text: o.handed ? '✓ 渡し済み' : '渡し済みにする', onclick: () => setFlag(o, 'handed', !o.handed) }),
+      o.canceled
+        ? el('button', { class: 'tog', text: '注文を復活', onclick: () => confirm(o.name + ' さんの注文を復活しますか？') && setState(o, '受付') })
+        : el('button', { class: 'tog danger', text: '取り消す', onclick: () => confirm(o.name + ' さんの注文を取り消しますか？') && setState(o, 'キャンセル') })
+    )
+  ));
+  return [stats, ...(cards.length ? cards : [el('div', { class: 'sub', style: 'padding:20px;text-align:center', text: '該当する注文はありません' })])];
+}
+
+/* ---------- 背番号タブ ---------- */
+async function setFinal(l, v) {
+  const prev = l.final; l.final = v; renderList();
+  try {
+    const r = await api({ action: 'adminUpdate', pass: PASS, type: 'final', row: l.row, orderId: l.orderId, value: v });
+    if (!r.ok) throw new Error(r.error);
+  } catch (e) { l.final = prev; renderList(); toast(e.message || '更新に失敗しました'); }
+}
+function numsView() {
+  const bibs = ROWS.filter((l) => l.state !== 'キャンセル' && l.printName);
+  const demand = {};
+  bibs.forEach((l) => l.numbers.forEach((n) => { demand[n] = (demand[n] || 0) + 1; }));
+  const finalCount = {};
+  bibs.forEach((l) => { if (l.final !== '') finalCount[l.final] = (finalCount[l.final] || 0) + 1; });
+  const dup = Object.keys(finalCount).filter((n) => finalCount[n] > 1);
+  const undecided = bibs.filter((l) => l.final === '').length;
+
+  const stats = el('div', { class: 'stats' },
+    el('div', { class: 'stat' }, el('b', { text: bibs.length + '枚' }), el('span', { text: 'ビブスの注文' })),
+    el('div', { class: 'stat' }, el('b', { text: undecided + '枚' }), el('span', { text: '番号が未確定' })),
+    el('div', { class: 'stat' }, el('b', { style: dup.length ? 'color:var(--err)' : '', text: dup.length ? dup.join('・') : 'なし' }), el('span', { text: '確定番号の重複' }))
+  );
+  const sorted = [...bibs].sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+  const cards = sorted.map((l) => {
+    const conflict = l.final !== '' && finalCount[l.final] > 1;
+    const sel = el('select', {}, el('option', { value: '', text: '未確定' }),
+      Array.from({ length: 100 }, (_, n) => el('option', { value: String(n), text: String(n) })));
+    sel.value = l.final;
+    sel.onchange = () => setFinal(l, sel.value);
+    return el('div', { class: 'card' + (conflict ? ' warn' : '') },
+      el('div', { class: 'head' }, el('b', { text: l.name }), el('span', { class: 'id', text: '#' + l.orderId })),
+      el('div', { class: 'sub', text: '背面の名前：' + l.printName + '　サイズ ' + l.size + (l.qty > 1 ? '　×' + l.qty : '') }),
+      el('div', { class: 'sub', style: 'margin-top:6px', text: '希望（タップで確定）' }),
+      el('div', { class: 'chips' }, ...l.numbers.map((n, i) => {
+        const c = el('div', { class: 'chip' + (l.final === n ? ' on' : '') + (demand[n] > 1 ? ' hot' : ''), text: '第' + (i + 1) + ' ' + n + (demand[n] > 1 ? '（' + demand[n] + '件）' : '') });
+        c.onclick = () => setFinal(l, n);
+        return c;
+      })),
+      el('div', { class: 'row2' }, el('span', { text: '確定番号' + (conflict ? '（重複！）' : ''), style: conflict ? 'color:var(--err);font-weight:700' : 'font-weight:700' }), sel)
+    );
+  });
+  return [stats, ...(cards.length ? cards : [el('div', { class: 'sub', style: 'padding:20px;text-align:center', text: 'ビブスの注文はまだありません' })])];
+}
+
+/* ---------- 発注数タブ ---------- */
+function aggregate() {
+  const m = new Map();
+  ROWS.filter((l) => l.state !== 'キャンセル').forEach((l) => {
+    const key = [l.item, l.color, l.logo, l.size].join('|');
+    if (!m.has(key)) m.set(key, { item: l.item, color: l.color, logo: l.logo, size: l.size, qty: 0 });
+    m.get(key).qty += l.qty;
+  });
+  return [...m.values()].sort((a, b) => (a.item + a.color + a.logo).localeCompare(b.item + b.color + b.logo, 'ja') || a.size.localeCompare(b.size, 'ja', { numeric: true }));
+}
+function aggView() {
+  const rows = aggregate();
+  if (!rows.length) return [el('div', { class: 'sub', style: 'padding:20px;text-align:center', text: '注文はまだありません' })];
+  const byItem = new Map();
+  rows.forEach((r) => { if (!byItem.has(r.item)) byItem.set(r.item, []); byItem.get(r.item).push(r); });
+  const out = [el('div', { class: 'stats' }, el('div', { class: 'stat' }, el('b', { text: rows.reduce((a, r) => a + r.qty, 0) + '点' }), el('span', { text: '発注の合計数量（キャンセル除く）' })))];
+  byItem.forEach((list, item) => {
+    out.push(el('h3', { text: item + '（' + list.reduce((a, r) => a + r.qty, 0) + '点）' }));
+    out.push(el('div', { class: 'card' }, el('table', {},
+      el('tr', {}, el('th', { text: '色・ロゴ' }), el('th', { text: 'サイズ' }), el('th', { class: 'n', text: '数量' })),
+      ...list.map((r) => el('tr', {}, el('td', { text: [r.color, r.logo].filter(Boolean).join('・') || '—' }), el('td', { text: r.size }), el('td', { class: 'n', text: r.qty })))
+    )));
+  });
+  return out;
+}
+async function copyAgg() {
+  const text = ['商品\t色\tロゴ\tサイズ\t数量', ...aggregate().map((r) => [r.item, r.color, r.logo, r.size, r.qty].join('\t'))].join('\n');
+  try { await navigator.clipboard.writeText(text); toast('コピーしました'); } catch (e) { toast('コピーできませんでした'); }
+}
+</script>
+</body>
+</html>
