@@ -142,7 +142,7 @@ $('tabOrder').onclick = () => show('order');
 $('tabCheck').onclick = () => show('check');
 
 /* ---------- 注文画面 ---------- */
-const IMG = { uniform: 'img/uniform.jpg', long: 'img/long.jpg', tee: 'img/tee.jpg' };
+const IMG = { uniform: 'order2.jpeg', long: 'order1.jpeg', tee: 'order3.jpeg' };
 
 function chipGroup(options, onPick) {
   const wrap = el('div', { class: 'chips' });
@@ -224,7 +224,7 @@ function renderOrder() {
   const v = $('viewOrder');
   v.replaceChildren(
     el('div', { class: 'notice', text: '欲しい商品を選んで「カートに追加」→ 下の「注文内容を確認」で完了です。キャンセルは11/15まで、このページの「確認・キャンセル」からできます。' }),
-    CONFIG.items.map(itemCard)
+    ...CONFIG.items.map(itemCard)
   );
 }
 
