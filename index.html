@@ -228,8 +228,8 @@ function itemCard(it) {
     body.append(fields.logo.node);
   }
   if (it.custom) {
-    body.append(el('label', {}, '背面の名前 ', el('span', { class: 'hint', text: 'ローマ字・12文字まで（例: CONPEY）' })));
-    fields.printName = el('input', { type: 'text', maxlength: '12', autocapitalize: 'characters', placeholder: 'CONPEY' });
+    body.append(el('label', {}, '背面の名前 ', el('span', { class: 'hint', text: 'ローマ字・ひらがな・カタカナ／12文字まで（例: CONPEY、こんぺい、コンペイ）' })));
+    fields.printName = el('input', { type: 'text', maxlength: '12', autocapitalize: 'characters', placeholder: 'CONPEY / こんぺい / コンペイ' });
     body.append(fields.printName);
     body.append(el('label', {}, '背番号の候補 ', el('span', { class: 'hint', text: '0〜99から最大3つ（希望順）。（ ）は現在の希望件数。重複は運営で調整します' })));
     fields.nums = [1, 2, 3].map((i) => el('select', {},
@@ -255,8 +255,8 @@ function itemCard(it) {
     if (fields.color && !line.color) return (err.textContent = '色を選んでください');
     if (fields.logo && !line.logo) return (err.textContent = 'ロゴの大きさを選んでください');
     if (it.custom) {
-      line.printName = fields.printName.value.trim().toUpperCase();
-      if (!/^[A-Z][A-Z .\-]{0,11}$/.test(line.printName)) return (err.textContent = '背面の名前はローマ字で入力してください');
+      line.printName = fields.printName.value.normalize('NFKC').trim().toUpperCase();
+      if (!/^[A-Zぁ-ゖァ-ヶ][A-Zぁ-ゖァ-ヶー・ .\-]{0,11}$/.test(line.printName)) return (err.textContent = '背面の名前は、ローマ字・ひらがな・カタカナで入力してください（12文字まで）');
       line.numbers = fields.nums.map((n) => n.value.trim()).filter(Boolean);
       if (!line.numbers.length) return (err.textContent = '背番号の候補を1つ以上入力してください');
       if (line.numbers.some((n) => !/^\d{1,2}$/.test(n))) return (err.textContent = '背番号は0〜99の数字で入力してください');
