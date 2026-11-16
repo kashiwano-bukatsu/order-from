@@ -49,6 +49,12 @@
   .grp{margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)}
   .gname{display:flex;align-items:center;gap:6px;font-size:14px}
   .dot{width:14px;height:14px;border-radius:50%;border:1px solid #0003;display:inline-block}
+  .sec{margin-top:14px;padding:6px 10px;background:#eef6f0;border-radius:8px;font-size:14px;font-weight:700;color:var(--green)}
+  .tap{cursor:pointer}
+  .caret{font-size:11px;color:var(--mute);width:12px}
+  .ppl{margin-top:6px;background:#fafcfa;border:1px solid var(--line);border-radius:8px;padding:4px 10px}
+  .pp{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px dashed var(--line);font-size:14px}
+  .pp:last-child{border:0}
   .szs{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
   .sz{background:#f0f4f0;border-radius:8px;padding:4px 10px;font-size:13px}
   .sz b{color:var(--green)}
@@ -315,28 +321,41 @@ const COLOR_ORDER = ['ブラック', 'ホワイト', 'デイジー', 'ジャパ�
 const COLOR_HEX = { 'ブラック': '#1a1a1a', 'ホワイト': '#ffffff', 'デイジー': '#ffd200', 'ジャパンブルー': '#0a3fc0', 'ガーネットレッド': '#7a0f2b', 'ミントグリーン': '#8fe3b5' };
 const orderIdx = (arr, v) => { const i = arr.indexOf(v); return i < 0 ? 99 : i; };
 
+const LOGO_ORDER = ['大（ビッグロゴ）', '小（ワンポイント）'];
+
 function aggregate() {
   const items = new Map();
   ROWS.filter((l) => l.state !== 'キャンセル').forEach((l) => {
-    if (!items.has(l.item)) items.set(l.item, { item: l.item, total: 0, groups: new Map() });
+    if (!items.has(l.item)) items.set(l.item, { item: l.item, total: 0, secs: new Map() });
     const it = items.get(l.item);
     it.total += l.qty;
-    const gk = l.color + '|' + l.logo;
-    if (!it.groups.has(gk)) it.groups.set(gk, { color: l.color, logo: l.logo, total: 0, sizes: new Map() });
-    const g = it.groups.get(gk);
+    if (!it.secs.has(l.logo)) it.secs.set(l.logo, { logo: l.logo, total: 0, groups: new Map() });
+    const sec = it.secs.get(l.logo);
+    sec.total += l.qty;
+    if (!sec.groups.has(l.color)) sec.groups.set(l.color, { color: l.color, total: 0, sizes: new Map(), people: [] });
+    const g = sec.groups.get(l.color);
     g.total += l.qty;
     g.sizes.set(l.size, (g.sizes.get(l.size) || 0) + l.qty);
+    g.people.push({ name: l.name, orderId: l.orderId, size: l.size, qty: l.qty, printName: l.printName, final: l.final });
   });
   return [...items.values()]
     .sort((a, b) => orderIdx(ITEM_ORDER, a.item) - orderIdx(ITEM_ORDER, b.item) || a.item.localeCompare(b.item, 'ja'))
     .map((it) => ({
       item: it.item, total: it.total,
-      groups: [...it.groups.values()]
-        .sort((a, b) => orderIdx(COLOR_ORDER, a.color) - orderIdx(COLOR_ORDER, b.color) || a.logo.localeCompare(b.logo, 'ja'))
-        .map((g) => ({ color: g.color, logo: g.logo, total: g.total, sizes: [...g.sizes.entries()].sort((x, y) => sizeIdx(x[0]) - sizeIdx(y[0])) }))
+      secs: [...it.secs.values()]
+        .sort((a, b) => orderIdx(LOGO_ORDER, a.logo) - orderIdx(LOGO_ORDER, b.logo))
+        .map((sec) => ({
+          logo: sec.logo, total: sec.total,
+          groups: [...sec.groups.values()]
+            .sort((a, b) => orderIdx(COLOR_ORDER, a.color) - orderIdx(COLOR_ORDER, b.color))
+            .map((g) => ({
+              color: g.color, total: g.total,
+              sizes: [...g.sizes.entries()].sort((x, y) => sizeIdx(x[0]) - sizeIdx(y[0])),
+              people: g.people.sort((x, y) => sizeIdx(x.size) - sizeIdx(y.size) || x.name.localeCompare(y.name, 'ja'))
+            }))
+        }))
     }));
 }
-const groupLabel = (g) => [g.color, g.logo].filter(Boolean).join('／');
 
 function aggView() {
   const items = aggregate();
@@ -345,14 +364,20 @@ function aggView() {
     el('div', { class: 'stat' }, el('b', { text: items.reduce((a, it) => a + it.total, 0) + '枚' }), el('span', { text: '全商品の合計（キャンセル除く）' })))];
   items.forEach((it) => {
     const body = [el('div', { class: 'head' }, el('b', { style: 'font-size:17px', text: it.item }), el('b', { style: 'font-size:22px;color:var(--green)', text: it.total + '枚' }))];
-    it.groups.forEach((g) => {
-      const label = groupLabel(g);
-      body.push(el('div', { class: 'grp' },
-        label ? el('div', { class: 'head' },
-          el('span', { class: 'gname' }, COLOR_HEX[g.color] ? el('i', { class: 'dot', style: 'background:' + COLOR_HEX[g.color] }) : null, label),
-          el('b', { text: g.total + '枚' })) : null,
-        el('div', { class: 'szs' }, ...g.sizes.map(([s, n]) => el('span', { class: 'sz' }, s + ' ', el('b', { text: '×' + n }))))
-      ));
+    it.secs.forEach((sec) => {
+      if (sec.logo) body.push(el('div', { class: 'sec head' }, el('span', { text: 'ロゴ：' + sec.logo }), el('b', { text: sec.total + '枚' })));
+      sec.groups.forEach((g) => {
+        const list = el('div', { class: 'ppl hidden' }, ...g.people.map((pe) => el('div', { class: 'pp' },
+          el('span', { text: pe.name + (pe.printName ? '（' + pe.printName + (pe.final !== '' ? '／' + pe.final + '番' : '') + '）' : '') }),
+          el('span', { class: 'sub', text: pe.size + ' ×' + pe.qty }))));
+        const caret = el('span', { class: 'caret', text: '▶' });
+        const hd = el('div', { class: 'head tap', onclick: () => { list.classList.toggle('hidden'); caret.textContent = list.classList.contains('hidden') ? '▶' : '▼'; } },
+          el('span', { class: 'gname' }, caret, COLOR_HEX[g.color] ? el('i', { class: 'dot', style: 'background:' + COLOR_HEX[g.color] }) : null, g.color || '注文者を見る'),
+          el('b', { text: g.total + '枚' }));
+        body.push(el('div', { class: 'grp' }, hd,
+          el('div', { class: 'szs' }, ...g.sizes.map(([s, n]) => el('span', { class: 'sz' }, s + ' ', el('b', { text: '×' + n })))),
+          list));
+      });
     });
     out.push(el('div', { class: 'card' }, ...body));
   });
@@ -362,9 +387,11 @@ async function copyAgg() {
   const lines = [];
   aggregate().forEach((it) => {
     lines.push(it.item + '　' + it.total + '枚');
-    it.groups.forEach((g) => {
-      const label = groupLabel(g);
-      lines.push((label ? '  ' + label + '　' + g.total + '枚：' : '  ') + g.sizes.map(([s, n]) => s + '×' + n).join('、'));
+    it.secs.forEach((sec) => {
+      if (sec.logo) lines.push('  【' + sec.logo + '】' + sec.total + '枚');
+      sec.groups.forEach((g) => {
+        lines.push('    ' + (g.color ? g.color + '　' + g.total + '枚：' : '') + g.sizes.map(([s, n]) => s + '×' + n).join('、'));
+      });
     });
     lines.push('');
   });
