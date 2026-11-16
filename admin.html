@@ -46,6 +46,12 @@
   td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}
   td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
   h3{margin:14px 0 4px;font-size:15px}
+  .grp{margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)}
+  .gname{display:flex;align-items:center;gap:6px;font-size:14px}
+  .dot{width:14px;height:14px;border-radius:50%;border:1px solid #0003;display:inline-block}
+  .szs{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .sz{background:#f0f4f0;border-radius:8px;padding:4px 10px;font-size:13px}
+  .sz b{color:var(--green)}
   .err{color:var(--err);font-size:13px;margin-top:8px;min-height:1em}
   .hidden{display:none}
   .toast{position:fixed;left:12px;right:12px;bottom:16px;background:#222;color:#fff;border-radius:10px;padding:10px 14px;font-size:14px;z-index:20;text-align:center}
@@ -194,7 +200,7 @@ function buildTab() {
     });
     ctl.append(search, chips);
   } else if (tab === 'agg') {
-    ctl.append(el('button', { class: 'btn ghost', style: 'margin:0 0 10px', text: '集計をコピー（メーカー発注用）', onclick: copyAgg }));
+    ctl.append(el('button', { class: 'btn ghost', style: 'margin:0 0 10px', text: '商品別の集計をコピー（メーカー発注用）', onclick: copyAgg }));
   }
   renderList();
 }
@@ -303,34 +309,66 @@ function numsView() {
   return [stats, ...(cards.length ? cards : [el('div', { class: 'sub', style: 'padding:20px;text-align:center', text: 'ビブスの注文はまだありません' })])];
 }
 
-/* ---------- 発注数タブ ---------- */
+/* ---------- 発注数タブ（商品ごと → 色・ロゴ → サイズ） ---------- */
+const ITEM_ORDER = ['Tシャツ（半袖）', 'ロングTシャツ（長袖）', 'リバーシブルビブス'];
+const COLOR_ORDER = ['ブラック', 'ホワイト', 'デイジー', 'ジャパンブルー', 'ガーネットレッド', 'ミントグリーン'];
+const COLOR_HEX = { 'ブラック': '#1a1a1a', 'ホワイト': '#ffffff', 'デイジー': '#ffd200', 'ジャパンブルー': '#0a3fc0', 'ガーネットレッド': '#7a0f2b', 'ミントグリーン': '#8fe3b5' };
+const orderIdx = (arr, v) => { const i = arr.indexOf(v); return i < 0 ? 99 : i; };
+
 function aggregate() {
-  const m = new Map();
+  const items = new Map();
   ROWS.filter((l) => l.state !== 'キャンセル').forEach((l) => {
-    const key = [l.item, l.color, l.logo, l.size].join('|');
-    if (!m.has(key)) m.set(key, { item: l.item, color: l.color, logo: l.logo, size: l.size, qty: 0 });
-    m.get(key).qty += l.qty;
+    if (!items.has(l.item)) items.set(l.item, { item: l.item, total: 0, groups: new Map() });
+    const it = items.get(l.item);
+    it.total += l.qty;
+    const gk = l.color + '|' + l.logo;
+    if (!it.groups.has(gk)) it.groups.set(gk, { color: l.color, logo: l.logo, total: 0, sizes: new Map() });
+    const g = it.groups.get(gk);
+    g.total += l.qty;
+    g.sizes.set(l.size, (g.sizes.get(l.size) || 0) + l.qty);
   });
-  return [...m.values()].sort((a, b) => (a.item + a.color + a.logo).localeCompare(b.item + b.color + b.logo, 'ja') || sizeIdx(a.size) - sizeIdx(b.size));
+  return [...items.values()]
+    .sort((a, b) => orderIdx(ITEM_ORDER, a.item) - orderIdx(ITEM_ORDER, b.item) || a.item.localeCompare(b.item, 'ja'))
+    .map((it) => ({
+      item: it.item, total: it.total,
+      groups: [...it.groups.values()]
+        .sort((a, b) => orderIdx(COLOR_ORDER, a.color) - orderIdx(COLOR_ORDER, b.color) || a.logo.localeCompare(b.logo, 'ja'))
+        .map((g) => ({ color: g.color, logo: g.logo, total: g.total, sizes: [...g.sizes.entries()].sort((x, y) => sizeIdx(x[0]) - sizeIdx(y[0])) }))
+    }));
 }
+const groupLabel = (g) => [g.color, g.logo].filter(Boolean).join('／');
+
 function aggView() {
-  const rows = aggregate();
-  if (!rows.length) return [el('div', { class: 'sub', style: 'padding:20px;text-align:center', text: '注文はまだありません' })];
-  const byItem = new Map();
-  rows.forEach((r) => { if (!byItem.has(r.item)) byItem.set(r.item, []); byItem.get(r.item).push(r); });
-  const out = [el('div', { class: 'stats' }, el('div', { class: 'stat' }, el('b', { text: rows.reduce((a, r) => a + r.qty, 0) + '点' }), el('span', { text: '発注の合計数量（キャンセル除く）' })))];
-  byItem.forEach((list, item) => {
-    out.push(el('h3', { text: item + '（' + list.reduce((a, r) => a + r.qty, 0) + '点）' }));
-    out.push(el('div', { class: 'card' }, el('table', {},
-      el('tr', {}, el('th', { text: '色・ロゴ' }), el('th', { text: 'サイズ' }), el('th', { class: 'n', text: '数量' })),
-      ...list.map((r) => el('tr', {}, el('td', { text: [r.color, r.logo].filter(Boolean).join('・') || '—' }), el('td', { text: r.size }), el('td', { class: 'n', text: r.qty })))
-    )));
+  const items = aggregate();
+  if (!items.length) return [el('div', { class: 'sub', style: 'padding:20px;text-align:center', text: '注文はまだありません' })];
+  const out = [el('div', { class: 'stats' }, ...items.map((it) => el('div', { class: 'stat' }, el('b', { text: it.total + '枚' }), el('span', { text: it.item }))),
+    el('div', { class: 'stat' }, el('b', { text: items.reduce((a, it) => a + it.total, 0) + '枚' }), el('span', { text: '全商品の合計（キャンセル除く）' })))];
+  items.forEach((it) => {
+    const body = [el('div', { class: 'head' }, el('b', { style: 'font-size:17px', text: it.item }), el('b', { style: 'font-size:22px;color:var(--green)', text: it.total + '枚' }))];
+    it.groups.forEach((g) => {
+      const label = groupLabel(g);
+      body.push(el('div', { class: 'grp' },
+        label ? el('div', { class: 'head' },
+          el('span', { class: 'gname' }, COLOR_HEX[g.color] ? el('i', { class: 'dot', style: 'background:' + COLOR_HEX[g.color] }) : null, label),
+          el('b', { text: g.total + '枚' })) : null,
+        el('div', { class: 'szs' }, ...g.sizes.map(([s, n]) => el('span', { class: 'sz' }, s + ' ', el('b', { text: '×' + n }))))
+      ));
+    });
+    out.push(el('div', { class: 'card' }, ...body));
   });
   return out;
 }
 async function copyAgg() {
-  const text = ['商品\t色\tロゴ\tサイズ\t数量', ...aggregate().map((r) => [r.item, r.color, r.logo, r.size, r.qty].join('\t'))].join('\n');
-  try { await navigator.clipboard.writeText(text); toast('コピーしました'); } catch (e) { toast('コピーできませんでした'); }
+  const lines = [];
+  aggregate().forEach((it) => {
+    lines.push(it.item + '　' + it.total + '枚');
+    it.groups.forEach((g) => {
+      const label = groupLabel(g);
+      lines.push((label ? '  ' + label + '　' + g.total + '枚：' : '  ') + g.sizes.map(([s, n]) => s + '×' + n).join('、'));
+    });
+    lines.push('');
+  });
+  try { await navigator.clipboard.writeText(lines.join('\n').trim()); toast('コピーしました'); } catch (e) { toast('コピーできませんでした'); }
 }
 </script>
 </body>
