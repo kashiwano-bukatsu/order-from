@@ -82,7 +82,7 @@
 <header>
   <div class="tag">1st ANNIVERSARY</div>
   <h1>カシワのBUKATSU<br>1周年記念グッズ 注文フォーム</h1>
-  <p>受付は <b>11/15（日）23:59</b> まで</p>
+  <p>受付は <b>11/17（火）23:59</b> まで</p>
 </header>
 
 <main>
@@ -170,7 +170,7 @@ function showClosed() {
   $('bar').classList.add('hidden');
   $('viewOrder').replaceChildren(el('div', { class: 'card' }, el('div', { class: 'body closed' },
     el('h2', { text: 'ご注文の受付は終了しました' }),
-    el('p', { text: '受付期間は11/15（日）23:59まででした。ご注文済みの方は、上の「注文書・キャンセル」から注文書を確認できます。ご不明点は運営までご連絡ください。' })
+    el('p', { text: '受付期間は11/17（火）23:59まででした。ご注文済みの方は、上の「注文書・キャンセル」から注文書を確認できます。ご不明点は運営までご連絡ください。' })
   )));
 }
 
@@ -278,7 +278,7 @@ function renderOrder() {
   confirming = false;
   const v = $('viewOrder');
   v.replaceChildren(
-    el('div', { class: 'notice', text: '欲しい商品を選んで「カートに追加」→ 下の「注文内容を確認」で完了です。キャンセルは11/15まで、このページの「注文書・キャンセル」からできます。' }),
+    el('div', { class: 'notice', text: '欲しい商品を選んで「カートに追加」→ 下の「注文内容を確認」で完了です。キャンセルは11/17まで、このページの「注文書・キャンセル」からできます。' }),
     el('div', { class: 'hint', style: 'margin:-6px 0 14px' }, 'サイズに迷ったら ', el('a', { class: 'lnk', text: 'サイズ表を見る', onclick: (e) => { e.preventDefault(); openSizeChart(); } })),
     discNote(),
     ...CONFIG.items.map(itemCard)
@@ -401,7 +401,7 @@ $('barBtn').onclick = () => { if (isClosedNow()) { showClosed(); show('order'); 
 
 const KANA_RE = /^[ァ-ヶー・]+( [ァ-ヶー・]+)+$/;
 const DEFAULT_PAY = '商品代金は、商品のお引き渡し時にお支払いいただきます。金額が決まり次第、改めてご案内いたします。';
-const DEFAULT_CANCEL = '・注文のキャンセルは11/15（日）23:59まで、このページの「注文書・キャンセル」からできます。\n・受付期間を過ぎた後や、商品の受け渡し後のキャンセル・変更は、運営までご連絡ください。';
+const DEFAULT_CANCEL = '・注文のキャンセルは11/17（火）23:59まで、このページの「注文書・キャンセル」からできます。\n・受付期間を過ぎた後や、商品の受け渡し後のキャンセル・変更は、運営までご連絡ください。';
 
 function renderConfirm() {
   const v = $('viewOrder');
